@@ -1,0 +1,20 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // File Metadata for P2P Sharing
+    match /fileMetadata/{fileId} {
+      allow read: if true; // Public read needed to find files
+      allow create: if request.resource.data.fileSize <= 52428800 // Max 50MB declared
+                     && request.resource.data.fileName.size() < 100
+                     && request.resource.data.pinHash != null;
+      allow update: if request.resource.data.downloadCount == resource.data.downloadCount + 1; // Only allow incrementing count
+      allow delete: if false; // Auto-delete via expiry only (or admin)
+    }
+
+    // Text Sharing Board (Existing)
+    match /messages/{msgId} {
+      allow read, write: if true;
+    }
+  }
+}

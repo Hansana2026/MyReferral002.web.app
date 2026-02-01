@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Share | P2P File Transfer</title>
+    <meta name="description" content="Secure, encrypted peer-to-peer file sharing and text storage.">
+    <link rel="stylesheet" href="style.v2.css">
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔒</text></svg>">
+
+    <!-- Required Libraries -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-analytics-compat.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.0/dist/peerjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- Markdown & Sanitization -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.8/purify.min.js"></script>
+</head>
+
+<body>
+
+    <div class="container">
+
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo-area">
+                <span class="logo-icon">🔒 Secure Share</span>
+            </div>
+            <p class="app-subtitle">Encrypted. Peer-to-Peer. No Server Limits.</p>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" id="tabBtn-upload" onclick="window.app.showTab('upload')">📤 Upload
+                File</button>
+            <button class="tab-btn" id="tabBtn-download" onclick="window.app.showTab('download')">📥 Download
+                File</button>
+            <button class="tab-btn" id="tabBtn-text" onclick="window.app.showTab('text')">📝 Secure Text</button>
+        </div>
+
+        <!-- TAB 1: UPLOAD FILE -->
+        <div id="tab-upload" class="tab-content active">
+            <div class="drop-zone" id="dropZone">
+                <div class="drop-content">
+                    <span style="font-size: 3rem;">📁</span>
+                    <p>Drag & Drop <strong>Files</strong> or <strong>Folders</strong> here</p>
+                    <div style="margin-top:1rem; display:flex; justify-content:center; gap:10px;">
+                        <button class="secondary-btn" onclick="document.getElementById('fileInput').click()">Browse
+                            Files</button>
+                        <button class="secondary-btn" onclick="document.getElementById('folderInput').click()">Browse
+                            Folder</button>
+                    </div>
+                </div>
+                <!-- Dual inputs for File vs Folder logic -->
+                <input type="file" id="fileInput" multiple hidden>
+                <input type="file" id="folderInput" webkitdirectory directory multiple hidden>
+            </div>
+
+            <!-- Staging Area (Multi-File List) -->
+            <div id="fileListContainer" class="file-list-area hidden">
+                <div class="file-list-header">
+                    <span>Files Selected (<span id="fileCount">0</span>)</span>
+                    <button class="text-btn" onclick="window.app.clearFileSelection()">Clear All</button>
+                </div>
+                <div id="fileListBody" class="file-list-body">
+                    <!-- Dynamic Items -->
+                </div>
+                <div class="total-size">Total Size: <span id="totalSize">0 MB</span> / 50 MB</div>
+            </div>
+
+            <div class="settings-grid">
+                <div class="input-group">
+                    <label>Security PIN (Required)</label>
+                    <input type="number" id="uploadPin" class="glass-input" placeholder="4-8 digits">
+                </div>
+                <div class="input-group">
+                    <label>Expires In</label>
+                    <select id="uploadExpiry" class="glass-input">
+                        <option value="1">1 Hour</option>
+                        <option value="6">6 Hours</option>
+                        <option value="24" selected>24 Hours</option>
+                        <option value="168">7 Days</option>
+                        <option value="720">30 Days</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="input-group">
+                <label>Download Limit</label>
+                <select id="downloadLimit" class="glass-input">
+                    <option value="1">1 Time Only</option>
+                    <option value="5">5 Times</option>
+                    <option value="10" selected>10 Times</option>
+                    <option value="999">Unlimited</option>
+                </select>
+            </div>
+
+            <button id="startUploadBtn" class="cta-button">
+                <span>Encrypt & Upload</span>
+            </button>
+
+            <!-- Upload Progress -->
+            <div id="uploadProgressArea" class="progress-area hidden">
+                <div class="progress-label">
+                    <span id="uploadStatusText">Encrypting...</span>
+                    <span id="uploadPercent">0%</span>
+                </div>
+                <div class="progress-bar-bg">
+                    <div id="uploadProgressBar" class="progress-bar-fill" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Share Result -->
+            <div id="shareResultArea" class="result-area hidden">
+                <h3>✅ File Ready to Share!</h3>
+                <p class="warning-text">Checkout 'Download File' tab for history & management.</p>
+
+                <div class="share-link-box">
+                    <input type="text" id="shareLinkInput" readonly>
+                    <button class="copy-btn" id="copyLinkBtn">📋</button>
+                </div>
+
+                <div id="qrcode" class="qr-code-box"></div>
+            </div>
+        </div>
+
+        <!-- TAB 2: DOWNLOAD FILE -->
+        <div id="tab-download" class="tab-content">
+            <div class="input-group">
+                <label>File Link or ID</label>
+                <input type="text" id="downloadId" class="glass-input" placeholder="Paste link here...">
+            </div>
+
+            <div class="input-group">
+                <label>Enter PIN</label>
+                <input type="password" id="downloadPin" class="glass-input" placeholder="Requested PIN code">
+            </div>
+
+            <button id="startDownloadBtn" class="cta-button">
+                <span>Unlock & Download</span>
+            </button>
+
+            <!-- Saved Links Section -->
+            <div id="savedLinksArea" style="margin-top: 2rem; display: none;">
+                <h3 style="color: var(--primary-color); font-size: 1rem; margin-bottom: 0.5rem;">🕒 Active Links</h3>
+                <div id="savedLinksList" class="file-list-body" style="max-height: 200px; overflow-y: auto;">
+                    <!-- Dynamic Links -->
+                </div>
+            </div>
+
+            <!-- Download Progress -->
+            <div id="downloadProgressArea" class="progress-area hidden">
+                <div class="progress-label">
+                    <span id="downloadStatusText">Connecting to peer...</span>
+                    <span id="downloadPercent">0%</span>
+                </div>
+                <div class="progress-bar-bg">
+                    <div id="downloadProgressBar" class="progress-bar-fill" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: TEXT SHARE (Community Board) -->
+        <div id="tab-text" class="tab-content">
+            <div class="community-section">
+                <div class="privacy-title">Text Sharing Board</div>
+
+                <form id="shareForm">
+                    <div class="input-group">
+                        <input type="text" id="nameInput" class="glass-input" placeholder="Your Name" required>
+                    </div>
+                    <div class="input-group">
+                        <input type="text" id="locInput" class="glass-input" placeholder="Your Location" required>
+                    </div>
+                    <div class="input-group">
+                        <textarea id="msgInput" class="glass-input" placeholder="Type message (Markdown supported)..."
+                            required></textarea>
+                    </div>
+
+                    <div class="privacy-section">
+                        <div class="privacy-title">🔒 Secure Message Option</div>
+                        <div class="input-group">
+                            <label class="label-text">Secret Data (Optional)</label>
+                            <input type="text" id="secretInput" class="glass-input" placeholder="Hidden info">
+                        </div>
+                        <div class="input-group">
+                            <label class="label-text">Unlock Password</label>
+                            <input type="text" id="passwordInput" class="glass-input"
+                                placeholder="Req. if secret data set">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="cta-button">
+                        <span>Post Text</span>
+                    </button>
+                </form>
+
+                <div id="messageBoard" class="message-board">
+                    <!-- Messages render here -->
+                </div>
+            </div>
+        </div>
+
+        <div class="footer-text">
+            &copy; 2026 Secure Share. Zero Knowledge Encryption.
+        </div>
+    </div>
+
+    <!-- Main Script -->
+    <script type="module" src="script.js?v=3.0"></script>
+
+</body>
+
+</html>
