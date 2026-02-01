@@ -2,9 +2,9 @@ name: Supersonic P2P Verify & Deploy
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   test-and-deploy:
@@ -12,42 +12,31 @@ jobs:
     timeout-minutes: 10
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Install Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: 18
-        cache: 'npm'
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: "npm"
 
-    - name: Install Dependencies
-      run: npm ci
+      - name: Install Dependencies
+        run: npm ci
 
-    - name: Install Playwright Browsers
-      run: npx playwright install --with-deps
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps
 
-    # Start a local server to test the P2P connection
-    # We use 'serve' or a simple http-server. 
-    # Since we don't have a build step (it's vanilla JS), we serve 'public' directly.
-    - name: Start Local Server
-      run: |
-        npx http-server public -p 5000 &
-        echo "Server started on port 5000"
-        sleep 5 # Wait for server to be ready
+      - name: Run Supersonic P2P Tests
+        run: npx playwright test
+        env:
+          CI: true
 
-    - name: Run Supersonic P2P Tests
-      run: npx playwright test
-      env:
-        BASE_URL: http://localhost:5000
-        # CI=true usually forces headless
-        CI: true
-
-    - name: Deploy to Firebase (Only if Tests Pass)
-      if: success() && github.ref == 'refs/heads/main'
-      uses: FirebaseExtended/action-hosting-deploy@v0
-      with:
-        repoToken: '${{ secrets.GITHUB_TOKEN }}'
-        firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
-        channelId: live
-        projectId: myreferral002
+      - name: Deploy to Firebase (Only if Tests Pass)
+        if: success() && github.ref == 'refs/heads/main'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: "${{ secrets.GITHUB_TOKEN }}"
+          firebaseServiceAccount: "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}"
+          channelId: live
+          projectId: myreferral002

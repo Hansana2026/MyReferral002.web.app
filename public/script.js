@@ -994,4 +994,12 @@ const App = {
 // Start App
 document.addEventListener('DOMContentLoaded', () => {
     App.init();
+
+    // Auto-Open Download Tab if Link Shared
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('id')) {
+        window.app.showTab('download');
+        // Auto-fill the link box with full URL for clarity (optional, but good)
+        document.getElementById('downloadId').value = window.location.href;
+    }
 });
