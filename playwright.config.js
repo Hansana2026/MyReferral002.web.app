@@ -35,7 +35,7 @@ module.exports = defineConfig({
 
     /* Run your local dev server before starting the tests */
     webServer: {
-        command: 'npx http-server public -p 5000',
+        command: 'node start-test-env.js',
         url: 'http://localhost:5000',
         reuseExistingServer: !process.env.CI,
         timeout: 120 * 1000,

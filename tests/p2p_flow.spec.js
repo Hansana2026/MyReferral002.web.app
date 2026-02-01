@@ -76,3 +76,43 @@ test('Supersonic P2P Flow: Upload (Sender) & Download (Receiver)', async ({ brow
     await contextA.close();
     await contextB.close();
 });
+
+test('Supersonic P2P: Wrong PIN Handling', async ({ browser }) => {
+    // SENDER
+    const contextA = await browser.newContext();
+    const pageA = await contextA.newPage();
+    await pageA.goto('http://localhost:5000'); // Assume base url from config
+
+    // Upload File
+    await pageA.setInputFiles('#fileInput', {
+        name: 'secret.txt',
+        mimeType: 'text/plain',
+        buffer: Buffer.from('Secret Data')
+    });
+    await pageA.fill('#uploadPin', '5555');
+    await pageA.click('#startUploadBtn');
+    await expect(pageA.locator('#uploadStatusText')).toHaveText('Done!', { timeout: 15000 });
+    const shareLink = await pageA.inputValue('#shareLinkInput');
+
+    // RECEIVER (Attacker)
+    const contextB = await browser.newContext();
+    const pageB = await contextB.newPage();
+    await pageB.goto(shareLink);
+
+    // Wrong PIN
+    await pageB.fill('#downloadPin', '0000');
+
+    // Listen for dialog (alert)
+    pageB.on('dialog', async dialog => {
+        expect(dialog.message()).toContain('Incorrect PIN');
+        await dialog.dismiss();
+    });
+
+    await pageB.click('#startDownloadBtn');
+
+    // Verify Error UI
+    await expect(pageB.locator('#downloadStatusText')).toContainText('Error');
+
+    await contextA.close();
+    await contextB.close();
+});

@@ -118,7 +118,15 @@ const P2PManager = {
 
     async init() {
         return new Promise((resolve, reject) => {
-            this.peer = new Peer(null, {
+            // DETECT TEST ENV: If on localhost:5000, use local PeerJS server
+            const isLocalTest = window.location.hostname === 'localhost' && window.location.port === '5000';
+
+            const peerConfig = isLocalTest ? {
+                host: 'localhost',
+                port: 9000,
+                path: '/myapp',
+                debug: 3
+            } : {
                 debug: 3, // LEVEL 3: Logs every handshake step (Critical for debugging)
                 config: {
                     iceTransportPolicy: 'all',
@@ -132,7 +140,10 @@ const P2PManager = {
                         { urls: 'stun:stun2.l.google.com:19302' }
                     ]
                 }
-            });
+            };
+
+            console.log(`P2P Mode: ${isLocalTest ? '🏠 LOCAL (Reliable)' : '☁️ CLOUD (Public)'}`);
+            this.peer = new Peer(null, peerConfig);
 
             // --- 100% ERROR IDENTIFICATION LISTENERS ---
 
