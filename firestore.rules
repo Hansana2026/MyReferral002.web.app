@@ -16,5 +16,10 @@ service cloud.firestore {
     match /messages/{msgId} {
       allow read, write: if true;
     }
+
+    // Global Active Links (New)
+    match /active_links/{linkId} {
+       allow read, create: if true;
+    }
   }
 }

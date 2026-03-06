@@ -117,32 +117,50 @@ const P2PManager = {
     peerId: null,
 
     async init() {
-        return new Promise((resolve, reject) => {
+        return new Promise(async (resolve, reject) => {
             // DETECT TEST ENV: If on localhost:5000, use local PeerJS server
             const isLocalTest = window.location.hostname === 'localhost' && window.location.port === '5000';
 
-            const peerConfig = isLocalTest ? {
-                host: 'localhost',
-                port: 9000,
-                path: '/myapp',
-                debug: 3
-            } : {
-                debug: 3, // LEVEL 3: Logs every handshake step (Critical for debugging)
-                config: {
-                    iceTransportPolicy: 'all',
-                    iceCandidatePoolSize: 10,
-                    iceServers: [
-                        // High-Redundancy STUN Array (The Fix)
-                        { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:global.stun.twilio.com:3478' },
-                        { urls: 'stun:stun.services.mozilla.com' },
-                        { urls: 'stun:stun1.l.google.com:19302' },
-                        { urls: 'stun:stun2.l.google.com:19302' }
-                    ]
-                }
-            };
+            let peerConfig;
 
-            console.log(`P2P Mode: ${isLocalTest ? '🏠 LOCAL (Reliable)' : '☁️ CLOUD (Public)'}`);
+            if (isLocalTest) {
+                peerConfig = {
+                    host: 'localhost',
+                    port: 9000,
+                    path: '/myapp',
+                    debug: 3
+                };
+            } else {
+                // FETCH METERED.CA TURN SERVERS (API)
+                let iceServers = [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:global.stun.twilio.com:3478' }
+                ];
+
+                try {
+                    // API Key provided by user
+                    const response = await fetch("https://myreferral002.metered.live/api/v1/turn/credentials?apiKey=74ccc9f4abe1443e1b9b38613f255db731dd");
+                    const meteredServers = await response.json();
+
+                    if (Array.isArray(meteredServers)) {
+                        iceServers = meteredServers;
+                        console.log('✅ Loaded Metered TURN servers via API');
+                    }
+                } catch (e) {
+                    console.error('⚠️ Failed to load Metered TURN:', e);
+                }
+
+                peerConfig = {
+                    debug: 2,
+                    config: {
+                        iceTransportPolicy: 'all',
+                        iceCandidatePoolSize: 10,
+                        iceServers: iceServers
+                    }
+                };
+            }
+
+            console.log(`P2P Mode: ${isLocalTest ? '🏠 LOCAL (Reliable)' : '☁️ CLOUD (Public with TURN)'}`);
             this.peer = new Peer(null, peerConfig);
 
             // --- 100% ERROR IDENTIFICATION LISTENERS ---
@@ -171,16 +189,43 @@ const P2PManager = {
 
             // 2. Monitor Connection Lifecycle
             this.peer.on('connection', (conn) => {
+                console.log('📞 Incoming Connection from:', conn.peer);
+                this.updateConnectionStatus('connected', `Peer Connected: ${conn.peer.substring(0, 8)}...`);
+
                 conn.on('error', (err) => {
                     console.error('🔴 CONNECTION ERROR:', err);
+                    this.updateConnectionStatus('disconnected', 'Connection Error');
                 });
 
                 conn.on('close', () => {
                     console.warn('⚠️ Connection Closed.');
+                    this.updateConnectionStatus('waiting', 'Waiting for connections...');
                 });
                 this.handleIncomingConnection(conn);
             });
         });
+    },
+
+    updateConnectionStatus(state, message) {
+        const statusDiv = document.getElementById('connectionStatus');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+
+        if (!statusDiv || !statusDot || !statusText) return;
+
+        statusDiv.classList.remove('connected', 'disconnected');
+
+        if (state === 'connected') {
+            statusDiv.classList.add('connected');
+            statusDot.textContent = '🟢';
+        } else if (state === 'disconnected') {
+            statusDiv.classList.add('disconnected');
+            statusDot.textContent = '🔴';
+        } else {
+            statusDot.textContent = '🟡';
+        }
+
+        statusText.textContent = message;
     },
 
     handleIncomingConnection(conn) {
@@ -231,25 +276,31 @@ const LinkHistoryManager = {
     links: [],
 
     init() {
-        try {
-            const raw = localStorage.getItem(this.key);
-            this.links = raw ? JSON.parse(raw) : [];
-            this.cleanup();
-            this.checkLimits(); // New Check
-            this.render();
-        } catch (e) {
-            console.error("History Init Error", e);
-        }
+        // GLOBAL ACTIVE LINKS (Firestore) - Public Feed
+        db.collection('active_links')
+            .orderBy('createdAt', 'desc')
+            .limit(50)
+            .onSnapshot(snapshot => {
+                this.links = [];
+                snapshot.forEach(doc => {
+                    this.links.push(doc.data());
+                });
+                this.render();
+            }, err => console.error("Link Fetch Error:", err));
     },
 
-    save(data) {
-        // data: { id, url, name, expiryMs, isCreator, limit }
-        this.links.push({
-            ...data,
-            savedAt: Date.now()
-        });
-        this.persist();
-        this.render();
+    async save(data) {
+        // SAVE TO GLOBAL COLLECTION
+        try {
+            await db.collection('active_links').doc(data.id).set({
+                ...data,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                savedAt: Date.now() // Keep numeric for client logic
+            });
+            console.log("✅ Saved to Global Active Links");
+        } catch (e) {
+            console.error("Global Save Error", e);
+        }
     },
 
     persist() {
